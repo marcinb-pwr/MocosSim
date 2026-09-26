@@ -50,9 +50,9 @@ function execute!(::Val{OutsideInfectionEvent}, state::SimState, params::SimPara
     return false
   end
 
-  setsubjecthealth!(state, event, Incubating)
-
   subject_id = subject(event)
+  setsubjecthealth!(state, event, Incubating)
+  resetdetected!(state, subject_id)
 
   progression = sample_progression(state.rng, params.progression_params,
     age(params, subject_id),
@@ -104,6 +104,7 @@ function execute!(::Val{TransmissionEvent}, state::SimState, params::SimParams, 
   end
 
   setsubjecthealth!(state, event, Incubating)
+  resetdetected!(state, subject(event))
 
   progression = sample_progression(state.rng, params.progression_params,
     age(params, subject(event)),
@@ -225,9 +226,11 @@ function execute!(::Val{RecoveryEvent}, state::SimState, params::SimParams, even
   setsubjecthealth!(state, event, Recovered)
   freedom_status = subjectfreedom(state, event)
   if Hospitalized == freedom_status
-    push!(state.queue, Event(Val(ReleasedEvent), time(event), subject(event)))
+    push!(state.queue, Event(Val(ReleasedEvent), time(event), subject(event)), immediate=true)
   elseif HomeTreatment == freedom_status
-    push!(state.queue, Event(Val(HomeTreatmentSuccessEvent), time(event), subject(event)))
+    push!(state.queue, Event(Val(HomeTreatmentSuccessEvent), time(event), subject(event)), immediate=true)
+  else
+    finish_recovery!(state, subject(event))
   end
   return true
 end
@@ -266,6 +269,7 @@ function execute!(::Val{HomeTreatmentSuccessEvent}, state::SimState, params::Sim
   else
     setfreedom!(state, subject(event), Free)
   end
+  finish_recovery!(state, subject(event))
   return true
 end
 
@@ -299,8 +303,22 @@ end
 
 function execute!(::Val{ReleasedEvent}, state::SimState, params::SimParams, event::Event)::Bool
   @assert subjecthealth(state, event) in SA[Dead, Recovered]
-  setfreedom!(state, subject(event), Released)
+  if subjecthealth(state, event) == Recovered
+    setfreedom!(state, subject(event), Free)
+    finish_recovery!(state, subject(event))
+  else
+    setfreedom!(state, subject(event), Released)
+  end
   return true
+end
+
+"""Close an infection episode while retaining it in the infection forest."""
+function finish_recovery!(state::SimState, person_id::Integer)
+  @assert health(state, person_id) == Recovered
+  sethealth!(state, person_id, Healthy)
+  clearprogression!(state, person_id)
+  clearstrain!(state, person_id)
+  nothing
 end
 
 #
@@ -543,6 +561,4 @@ function forwardtrace!(state::SimState, params::SimParams, person_id::Integer; t
   end
   nothing
 end
-
-
 

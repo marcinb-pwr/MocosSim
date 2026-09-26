@@ -1,6 +1,46 @@
 
 const StrainInfectivityTable = SVector{NUM_STRAINS, Float64}
 
+"""Protection probabilities against each challenge strain.
+
+Rows of `infection` are the strain of the most recent prior infection and
+columns are the challenge strain. `vaccination` applies while the existing
+infection-immunity vaccination flag is active. Probabilities may optionally
+wane exponentially; `Inf` keeps them constant. Defaults preserve the old
+behaviour (vaccination blocks infection, prior infection adds no protection),
+so calibrated values must be supplied explicitly for an Omicron scenario.
+"""
+struct CrossImmunityParams
+  infection::Matrix{Float64}
+  vaccination::Vector{Float64}
+  infection_half_life::Float64
+  vaccination_half_life::Float64
+  function CrossImmunityParams(infection, vaccination, infection_half_life::Real, vaccination_half_life::Real)
+    size(infection) == (NUM_STRAINS, NUM_STRAINS) || throw(ArgumentError("infection cross-immunity must be a $NUM_STRAINS×$NUM_STRAINS matrix"))
+    length(vaccination) == NUM_STRAINS || throw(ArgumentError("vaccination protection must contain $NUM_STRAINS values"))
+    all(0 .<= infection .<= 1) || throw(ArgumentError("cross-immunity probabilities must be in [0, 1]"))
+    all(0 .<= vaccination .<= 1) || throw(ArgumentError("vaccination probabilities must be in [0, 1]"))
+    (infection_half_life > 0 || infection_half_life == Inf) || throw(ArgumentError("infection-immunity half-life must be positive"))
+    (vaccination_half_life > 0 || vaccination_half_life == Inf) || throw(ArgumentError("vaccination-immunity half-life must be positive"))
+    new(Matrix{Float64}(infection), Vector{Float64}(vaccination),
+      Float64(infection_half_life), Float64(vaccination_half_life))
+  end
+end
+
+CrossImmunityParams(; infection=zeros(NUM_STRAINS, NUM_STRAINS),
+  vaccination=ones(NUM_STRAINS), infection_half_life=Inf,
+  vaccination_half_life=Inf) = CrossImmunityParams(
+    infection, vaccination, infection_half_life, vaccination_half_life)
+
+# Compatibility with the initial cross-immunity API: the third positional
+# argument is the post-infection half-life. Vaccine protection remains constant
+# until its scheduled loss event unless a fourth argument is supplied.
+CrossImmunityParams(infection, vaccination, infection_half_life::Real) =
+  CrossImmunityParams(infection, vaccination, infection_half_life, Inf)
+
+wanedprotection(base::Real, age::Real, half_life::Real) =
+  half_life == Inf ? Float64(base) : Float64(base) * exp2(-max(0.0, Float64(age)) / half_life)
+
 function make_infectivity_table(;base_multiplier::Real=1.0, british_multiplier::Real=1.70, delta_multiplier::Real=1.7*1.5, omicron_multiplier::Real=1.7*1.5*2.0)::StrainInfectivityTable
   # needs validation with real data
   immunity = StrainInfectivityTable(base_multiplier, british_multiplier, delta_multiplier, omicron_multiplier)
