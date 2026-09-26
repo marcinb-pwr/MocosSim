@@ -84,14 +84,20 @@ straininfectivity(params::SimParams, strain::StrainKind) = straininfectivity(par
 function infectionprotection(state::SimState, params::SimParams, subject_id::Integer, strain::StrainKind)::Float64
   strain == NullStrain && return 0.0
   cross = params.cross_immunity_params
-  vaccine_protection = state.individuals[subject_id].infection_immunity ? cross.vaccination[Int(strain)] : 0.0
+  vaccine_protection = if state.individuals[subject_id].infection_immunity
+    base = cross.vaccination[Int(strain)]
+    age = max(0.0, Float64(timesinceimmunization(state, subject_id)))
+    wanedprotection(base, age, cross.vaccination_half_life)
+  else
+    0.0
+  end
   previous = recentbackwardinfection(state, subject_id)
   infection_protection = if contactkind(previous) == NoContact
     0.0
   else
     base = cross.infection[Int(strainkind(previous)), Int(strain)]
     age = max(0.0, Float64(time(state) - time(previous)))
-    cross.half_life == Inf ? base : base * exp2(-age / cross.half_life)
+    wanedprotection(base, age, cross.infection_half_life)
   end
   1 - (1 - vaccine_protection) * (1 - infection_protection)
 end
@@ -296,6 +302,7 @@ function make_params(
   infection_cross_immunity=zeros(NUM_STRAINS, NUM_STRAINS),
   vaccination_cross_immunity=ones(NUM_STRAINS),
   cross_immunity_half_life::Real=Inf,
+  vaccination_immunity_half_life::Real=Inf,
 
   hospital_kernel_param::Float64=0.0,
   healthcare_detection_prob::Float64=0.8,
@@ -314,7 +321,8 @@ function make_params(
 
   strain_infectivity_table = make_infectivity_table(british_multiplier=british_strain_multiplier, delta_multiplier=delta_strain_multiplier,omicron_multiplier=omicron_strain_multiplier)
   cross_immunity_params = CrossImmunityParams(
-    infection_cross_immunity, vaccination_cross_immunity, cross_immunity_half_life)
+    infection_cross_immunity, vaccination_cross_immunity,
+    cross_immunity_half_life, vaccination_immunity_half_life)
 
   age_coupling_kernel_params =
     if nothing === age_coupling_weights && nothing === age_coupling_thresholds && nothing === age_coupling_param; nothing

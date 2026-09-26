@@ -4,6 +4,7 @@ using MocosSim: RobinForest, Event, OutsideInfectionEvent, TransmissionEvent,
   CrossImmunityParams, subject, saveparams
 using MocosSim: SimState, Progression, Mild, Recovered, Healthy, UndefinedSeverity,
   sethealth!, setprogression!, setstrain!, finish_recovery!, health, progressionof
+using MocosSim: wanedprotection
 
 @testset "Multiple infection history" begin
   forest = RobinForest(2)
@@ -40,10 +41,14 @@ end
 @testset "Cross-immunity configuration" begin
   weights = zeros(4, 4)
   weights[Int(DeltaStrain), Int(OmicronStrain)] = 0.2
-  params = CrossImmunityParams(weights, [0.9, 0.8, 0.7, 0.3], 180)
+  params = CrossImmunityParams(weights, [0.9, 0.8, 0.7, 0.3], 180, 120)
   @test params.infection[Int(DeltaStrain), Int(OmicronStrain)] == 0.2
   @test params.vaccination[Int(OmicronStrain)] == 0.3
-  @test params.half_life == 180
+  @test params.infection_half_life == 180
+  @test params.vaccination_half_life == 120
+  @test CrossImmunityParams(weights, ones(4), 180).vaccination_half_life == Inf
+  @test wanedprotection(0.8, 120, params.vaccination_half_life) ≈ 0.4
+  @test wanedprotection(0.8, 240, params.vaccination_half_life) ≈ 0.2
   @test_throws ArgumentError CrossImmunityParams(zeros(3, 4), ones(4), Inf)
   @test_throws ArgumentError CrossImmunityParams(fill(1.1, 4, 4), ones(4), Inf)
 end

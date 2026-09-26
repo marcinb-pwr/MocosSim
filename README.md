@@ -27,13 +27,19 @@ params = load_params(
   infection_cross_immunity=cross_immunity,
   vaccination_cross_immunity=[0.90, 0.85, 0.80, 0.35],
   cross_immunity_half_life=180.0,
+  vaccination_immunity_half_life=120.0,
   # other scenario parameters...
 )
 ```
 
 These numbers are an example, not a calibration. Scenario-specific estimates
 should be supplied explicitly. Protection wanes exponentially from the time of
-the latest infection; use `cross_immunity_half_life=Inf` to disable waning.
-Vaccine and prior-infection protection are combined as independent layers.
+the latest infection; use `cross_immunity_half_life=Inf` to disable that
+waning. Vaccination protection uses the time of the latest vaccination and its
+own `vaccination_immunity_half_life`; it also becomes zero at the scheduled
+loss-of-immunity event. The four `vaccination_cross_immunity` entries allow
+immune escape to be calibrated independently for each challenge strain (for
+example, lower vaccine protection against Omicron). Vaccine and prior-infection
+protection are combined as independent layers, so hybrid immunity is supported.
 Saved results now contain one row per infection and include
 `infection_subjects`, allowing repeated subject IDs across the two-year run.
