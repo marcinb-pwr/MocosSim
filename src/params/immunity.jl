@@ -1,6 +1,33 @@
 
 const StrainInfectivityTable = SVector{NUM_STRAINS, Float64}
 
+"""Protection probabilities against each challenge strain.
+
+Rows of `infection` are the strain of the most recent prior infection and
+columns are the challenge strain. `vaccination` applies while the existing
+infection-immunity vaccination flag is active. Probabilities may optionally
+wane exponentially; `Inf` keeps them constant. Defaults preserve the old
+behaviour (vaccination blocks infection, prior infection adds no protection),
+so calibrated values must be supplied explicitly for an Omicron scenario.
+"""
+struct CrossImmunityParams
+  infection::Matrix{Float64}
+  vaccination::Vector{Float64}
+  half_life::Float64
+  function CrossImmunityParams(infection, vaccination, half_life::Real)
+    size(infection) == (NUM_STRAINS, NUM_STRAINS) || throw(ArgumentError("infection cross-immunity must be a $NUM_STRAINS×$NUM_STRAINS matrix"))
+    length(vaccination) == NUM_STRAINS || throw(ArgumentError("vaccination protection must contain $NUM_STRAINS values"))
+    all(0 .<= infection .<= 1) || throw(ArgumentError("cross-immunity probabilities must be in [0, 1]"))
+    all(0 .<= vaccination .<= 1) || throw(ArgumentError("vaccination probabilities must be in [0, 1]"))
+    (half_life > 0 || half_life == Inf) || throw(ArgumentError("cross-immunity half-life must be positive"))
+    new(Matrix{Float64}(infection), Vector{Float64}(vaccination), Float64(half_life))
+  end
+end
+
+CrossImmunityParams(; infection=zeros(NUM_STRAINS, NUM_STRAINS),
+  vaccination=ones(NUM_STRAINS), half_life=Inf) =
+  CrossImmunityParams(infection, vaccination, half_life)
+
 function make_infectivity_table(;base_multiplier::Real=1.0, british_multiplier::Real=1.70, delta_multiplier::Real=1.7*1.5, omicron_multiplier::Real=1.7*1.5*2.0)::StrainInfectivityTable
   # needs validation with real data
   immunity = StrainInfectivityTable(base_multiplier, british_multiplier, delta_multiplier, omicron_multiplier)

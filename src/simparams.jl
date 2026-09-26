@@ -40,6 +40,7 @@ struct SimParams <: AbstractSimParams
 
   progression_params::ProgressionParams
   strain_infectivity_table::StrainInfectivityTable
+  cross_immunity_params::CrossImmunityParams
 
   constant_kernel_param::Float32
   household_kernel_param::Float32
@@ -80,7 +81,24 @@ numindividuals(params::SimParams) = length(params.household_ptrs)
 
 straininfectivity(params::SimParams, strain::StrainKind) = straininfectivity(params.strain_infectivity_table, strain)
 
-isimmune(state::SimState, params::SimParams, subject_id::Integer, immunity::Bool, strain::StrainKind)::Bool = state.individuals[subject_id].infection_immunity
+function infectionprotection(state::SimState, params::SimParams, subject_id::Integer, strain::StrainKind)::Float64
+  strain == NullStrain && return 0.0
+  cross = params.cross_immunity_params
+  vaccine_protection = state.individuals[subject_id].infection_immunity ? cross.vaccination[Int(strain)] : 0.0
+  previous = recentbackwardinfection(state, subject_id)
+  infection_protection = if contactkind(previous) == NoContact
+    0.0
+  else
+    base = cross.infection[Int(strainkind(previous)), Int(strain)]
+    age = max(0.0, Float64(time(state) - time(previous)))
+    cross.half_life == Inf ? base : base * exp2(-age / cross.half_life)
+  end
+  1 - (1 - vaccine_protection) * (1 - infection_protection)
+end
+
+function isimmune(state::SimState, params::SimParams, subject_id::Integer, immunity::Bool, strain::StrainKind)::Bool
+  Float64(params.immunity_rand[subject_id]) < infectionprotection(state, params, subject_id, strain)
+end
 
 householdof(params::SimParams, person_id::Integer) = UnitRange(params.household_ptrs[person_id]...)
 school(params::SimParams, person_id::Integer) = params.schools[person_id]
@@ -275,6 +293,10 @@ function make_params(
   delta_strain_multiplier::Real=1.7*1.5,
   omicron_strain_multiplier::Real=1.7*1.5*2.0,
 
+  infection_cross_immunity=zeros(NUM_STRAINS, NUM_STRAINS),
+  vaccination_cross_immunity=ones(NUM_STRAINS),
+  cross_immunity_half_life::Real=Inf,
+
   hospital_kernel_param::Float64=0.0,
   healthcare_detection_prob::Float64=0.8,
   healthcare_detection_delay::Float64=1.0,
@@ -291,6 +313,8 @@ function make_params(
   class_ptrs = make_household_ptrs(df_class.class_index)
 
   strain_infectivity_table = make_infectivity_table(british_multiplier=british_strain_multiplier, delta_multiplier=delta_strain_multiplier,omicron_multiplier=omicron_strain_multiplier)
+  cross_immunity_params = CrossImmunityParams(
+    infection_cross_immunity, vaccination_cross_immunity, cross_immunity_half_life)
 
   age_coupling_kernel_params =
     if nothing === age_coupling_weights && nothing === age_coupling_thresholds && nothing === age_coupling_param; nothing
@@ -358,6 +382,7 @@ function make_params(
 
     progression_params,
     strain_infectivity_table,
+    cross_immunity_params,
 
     constant_kernel_param,
     household_kernel_param,

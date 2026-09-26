@@ -69,6 +69,7 @@ sourcehealth(state::SimState, event::Event)::HealthState = health(state, source(
 sourcefreedom(state::SimState, event::Event)::FreedomState = freedom(state, source(event))
 
 strainof(state::SimState, person_id::Integer) = strainof(state.forest, person_id)
+recentstrainof(state::SimState, person_id::Integer) = recentstrainof(state.forest, person_id)
 immunityof(state::SimState, person_id::Integer)::Bool = state.individuals[person_id].severe_immunity
 immunizationday(state::SimState, person_id::Integer) = state.individuals[person_id].immunization_day
 timesinceimmunization(state::SimState, person_id::Integer)::TimePoint = time(state) - TimePoint(immunizationday(state, person_id))
@@ -83,10 +84,12 @@ numdead(state::SimState) = numdead(state.stats)
 
 forwardinfections(state::SimState, person_id::Integer) = forwardinfections(state.forest, person_id)
 backwardinfection(state::SimState, person_id::Integer) = backwardinfection(state.forest, person_id)
+recentforwardinfectionsof(state::SimState, person_id::Integer) = recentforwardinfectionsof(state.forest, person_id)
+recentbackwardinfection(state::SimState, person_id::Integer) = recentbackwardinfectionof(state.forest, person_id)
 
 function sethealth!(state::SimState, person_id::Integer, new_health::HealthState)
   orig = state.individuals[person_id]
-  @assert orig.health <= new_health
+  @assert orig.health <= new_health || new_health == Healthy
   state.individuals[person_id] = @set orig.health = new_health
   nothing
 end
@@ -104,6 +107,12 @@ function setdetected!(state::SimState, person_id::Integer, new_detected::Detecti
   nothing
 end
 
+function resetdetected!(state::SimState, person_id::Integer)
+  orig = state.individuals[person_id]
+  state.individuals[person_id] = @set orig.detected = Undetected
+  nothing
+end
+
 function setimmunity!(state::SimState, person_id::Integer, new_immunity::ImmunityState, time::Real)
   orig = state.individuals[person_id]
 
@@ -112,6 +121,8 @@ function setimmunity!(state::SimState, person_id::Integer, new_immunity::Immunit
       state.individuals[person_id] = @set orig.infection_immunity = false
     else
       state.individuals[person_id] = @set orig.infection_immunity = true
+      orig = state.individuals[person_id]
+      state.individuals[person_id] = @set orig.immunization_day = floor(TimeDay, time)
     end
   end
   if new_immunity == against_severe_progression
@@ -129,6 +140,12 @@ setimmunity!(state::SimState, person_id::Integer, new_immunity::ImmunityState) =
 function setprogression!(state::SimState, person_id::Integer, progression::Progression)
   @assert state.progressions[person_id].severity == UndefinedSeverity
   state.progressions[person_id] = progression
+  nothing
+end
+
+function clearprogression!(state::SimState, person_id::Integer)
+  @assert state.progressions[person_id].severity != UndefinedSeverity
+  state.progressions[person_id] = Progression()
   nothing
 end
 
@@ -152,6 +169,13 @@ function setstrain!(state::SimState, person_id::Integer, new_strain::StrainKind)
   orig = state.individuals[person_id]
   @assert orig.strain == NullStrain
   state.individuals[person_id] = @set orig.strain = new_strain
+  nothing
+end
+
+
+function clearstrain!(state::SimState, person_id::Integer)
+  orig = state.individuals[person_id]
+  state.individuals[person_id] = @set orig.strain = NullStrain
   nothing
 end
 
