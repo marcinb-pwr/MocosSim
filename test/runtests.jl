@@ -10,6 +10,7 @@ tests = [
   "population_grouping",
   "infection_modulations",
   "household_grouping",
+  "multi_infection",
 ]
 
 if length(ARGS) > 0
