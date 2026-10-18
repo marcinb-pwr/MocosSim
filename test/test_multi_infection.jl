@@ -5,6 +5,8 @@ using MocosSim: RobinForest, Event, OutsideInfectionEvent, TransmissionEvent,
 using MocosSim: SimState, Progression, Mild, Recovered, Healthy, UndefinedSeverity,
   sethealth!, setprogression!, setstrain!, finish_recovery!, health, progressionof
 using MocosSim: wanedprotection
+using MocosSim: calibrated_cross_immunity_table, calibrated_cross_immunity_std,
+  calibrated_vaccination_immunity, sample_immunity_calibration
 
 @testset "Multiple infection history" begin
   forest = RobinForest(2)
@@ -51,4 +53,27 @@ end
   @test wanedprotection(0.8, 240, params.vaccination_half_life) ≈ 0.2
   @test_throws ArgumentError CrossImmunityParams(zeros(3, 4), ones(4), Inf)
   @test_throws ArgumentError CrossImmunityParams(fill(1.1, 4, 4), ones(4), Inf)
+end
+
+
+@testset "Literature calibration and sensitivity" begin
+  central = calibrated_cross_immunity_table()
+  @test size(central) == (4, 4)
+  @test central[Int(DeltaStrain), Int(OmicronStrain)] == 0.50
+  @test calibrated_vaccination_immunity()[Int(OmicronStrain)] == 0.67
+  @test CrossImmunityParams().infection == central
+
+  no_uncertainty = sample_immunity_calibration(MersenneTwister(7), central, 0.0)
+  @test no_uncertainty == central
+  draw1 = sample_immunity_calibration(
+    MersenneTwister(7), central, calibrated_cross_immunity_std())
+  draw2 = sample_immunity_calibration(
+    MersenneTwister(7), central, calibrated_cross_immunity_std())
+  @test draw1 == draw2
+  @test all(0 .<= draw1 .<= 1)
+  @test draw1 != central
+  @test_throws ArgumentError sample_immunity_calibration(
+    MersenneTwister(7), central, zeros(3, 4))
+  @test_throws ArgumentError sample_immunity_calibration(
+    MersenneTwister(7), central, -0.1)
 end

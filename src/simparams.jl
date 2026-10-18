@@ -299,10 +299,12 @@ function make_params(
   delta_strain_multiplier::Real=1.7*1.5,
   omicron_strain_multiplier::Real=1.7*1.5*2.0,
 
-  infection_cross_immunity=zeros(NUM_STRAINS, NUM_STRAINS),
-  vaccination_cross_immunity=ones(NUM_STRAINS),
-  cross_immunity_half_life::Real=Inf,
-  vaccination_immunity_half_life::Real=Inf,
+  infection_cross_immunity=calibrated_cross_immunity_table(),
+  cross_immunity_std=0.0,
+  vaccination_cross_immunity=calibrated_vaccination_immunity(),
+  vaccination_immunity_std=0.0,
+  cross_immunity_half_life::Real=500.0,
+  vaccination_immunity_half_life::Real=100.0,
 
   hospital_kernel_param::Float64=0.0,
   healthcare_detection_prob::Float64=0.8,
@@ -320,8 +322,16 @@ function make_params(
   class_ptrs = make_household_ptrs(df_class.class_index)
 
   strain_infectivity_table = make_infectivity_table(british_multiplier=british_strain_multiplier, delta_multiplier=delta_strain_multiplier,omicron_multiplier=omicron_strain_multiplier)
+  # Keep sensitivity sampling reproducible without perturbing population-level
+  # random assignments made from the caller's simulation RNG.
+  calibration_rng = copy(rng)
+  sampled_cross_immunity = sample_immunity_calibration(
+    calibration_rng, infection_cross_immunity, cross_immunity_std; label="cross_immunity_std")
+  sampled_vaccination_immunity = sample_immunity_calibration(
+    calibration_rng, vaccination_cross_immunity, vaccination_immunity_std;
+    label="vaccination_immunity_std")
   cross_immunity_params = CrossImmunityParams(
-    infection_cross_immunity, vaccination_cross_immunity,
+    sampled_cross_immunity, sampled_vaccination_immunity,
     cross_immunity_half_life, vaccination_immunity_half_life)
 
   age_coupling_kernel_params =
