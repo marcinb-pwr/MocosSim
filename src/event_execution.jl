@@ -528,7 +528,9 @@ function forwardtrace!(state::SimState, params::SimParams, person_id::Integer; t
     forward_id = subject(infection)
 
     health_state = health(state, forward_id)
-    @assert Healthy != health_state
+    # Recovery returns people to Healthy so they can be infected again. Their
+    # recorded contact remains valid for tracing even after the episode ends.
+    @assert contactkind(backwardinfection(state, forward_id)) != NoContact "forward-traced contact must have a registered infection"
 
     if !trace_household_connections && (HouseholdContact == contact_kind)
       continue
