@@ -11,6 +11,7 @@ tests = [
   "infection_modulations",
   "household_grouping",
   "multi_infection",
+  "quarantine_infection",
 ]
 
 if length(ARGS) > 0

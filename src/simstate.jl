@@ -109,7 +109,10 @@ end
 
 function resetdetected!(state::SimState, person_id::Integer)
   orig = state.individuals[person_id]
-  state.individuals[person_id] = @set orig.detected = Undetected
+  # A new infection resets episode-specific detection, but not an active
+  # quarantine. Household transmission can infect someone already quarantined.
+  new_detected = isquarantined(state, person_id) ? UnderObservation : Undetected
+  state.individuals[person_id] = @set orig.detected = new_detected
   nothing
 end
 
